@@ -78,14 +78,32 @@ def confirm(prompt, default=True):
 
 def main_menu():
     """Main interactive menu."""
+    from sessions import SessionManager
+
     clear_screen()
     print_header()
 
-    action = get_choice("What would you like to do?", {
-        "train": "🏋️  Train a new agent",
-        "play": "🎬  Watch a trained agent play",
-        "quick": "⚡  Quick demo (recommended for first time)",
-    })
+    # Check for incomplete sessions
+    manager = SessionManager()
+    incomplete = manager.get_incomplete_sessions()
+
+    options = {
+        "train": "Train a new agent",
+        "play": "Watch a trained agent play",
+        "quick": "Quick demo (recommended for first time)",
+    }
+
+    # Add resume option if there are incomplete sessions
+    if incomplete:
+        options = {
+            "resume": f"Resume training ({len(incomplete)} incomplete)",
+            **options,
+        }
+
+    # Add sessions option
+    options["sessions"] = "View all training sessions"
+
+    action = get_choice("What would you like to do?", options)
 
     if action == "quick":
         return quick_demo()
@@ -93,6 +111,10 @@ def main_menu():
         return train_menu()
     elif action == "play":
         return play_menu()
+    elif action == "resume":
+        return resume_menu()
+    elif action == "sessions":
+        return sessions_menu()
 
 
 def quick_demo():
@@ -210,60 +232,256 @@ def train_menu():
 
 def play_menu():
     """Play a trained agent."""
+    from sessions import SessionManager
+    import torch
+
     clear_screen()
     print_header()
-    print("\n🎬 Watch Trained Agent\n")
+    print("\n Watch Trained Agent\n")
 
-    # Check for checkpoints
-    checkpoint_dir = "checkpoints"
-    if not os.path.exists(checkpoint_dir):
-        print("❌ No checkpoints found! Train an agent first.")
+    manager = SessionManager()
+    sessions = manager.list_sessions()
+
+    # Separate sessions with checkpoints
+    sessions_with_checkpoints = []
+    for s in sessions:
+        best_path = s.get_checkpoint_path("best")
+        latest_path = s.get_checkpoint_path("latest")
+        if os.path.exists(best_path) or os.path.exists(latest_path):
+            sessions_with_checkpoints.append(s)
+
+    # Check for legacy checkpoints
+    legacy_dir = "checkpoints"
+    legacy_checkpoints = []
+    if os.path.exists(legacy_dir):
+        legacy_checkpoints = [f for f in os.listdir(legacy_dir) if f.endswith('.pt')]
+
+    if not sessions_with_checkpoints and not legacy_checkpoints:
+        print("No checkpoints found! Train an agent first.")
         input("\nPress Enter to continue...")
         return main_menu()
 
-    checkpoints = [f for f in os.listdir(checkpoint_dir) if f.endswith('.pt')]
-    if not checkpoints:
-        print("❌ No checkpoints found! Train an agent first.")
-        input("\nPress Enter to continue...")
-        return main_menu()
+    # Build options
+    options = {}
 
-    print("Available checkpoints:")
-    for i, cp in enumerate(checkpoints, 1):
-        print(f"  {i}. {cp}")
+    if sessions_with_checkpoints:
+        print("Session checkpoints (game auto-detected):\n")
+        for i, s in enumerate(sessions_with_checkpoints, 1):
+            best = s.progress.get("best_reward", float("-inf"))
+            if isinstance(best, float) and best != float("-inf"):
+                best_str = f"Best: {best:.1f}"
+            else:
+                best_str = ""
+            print(f"  {i}. {s.game.title()} - {s.session_id}")
+            if best_str:
+                print(f"     {best_str}")
+            options[f"session_{i}"] = f"{s.game.title()} ({s.session_id})"
+
+    if legacy_checkpoints:
+        print("\nLegacy checkpoints (requires game selection):\n")
+        for i, cp in enumerate(legacy_checkpoints, 1):
+            idx = len(sessions_with_checkpoints) + i
+            print(f"  {idx}. {cp}")
+            options[f"legacy_{i}"] = cp
 
     while True:
         try:
-            choice = input(f"\nSelect checkpoint (1-{len(checkpoints)}): ").strip()
+            total = len(sessions_with_checkpoints) + len(legacy_checkpoints)
+            choice = input(f"\nSelect checkpoint (1-{total}, or 'b' for back): ").strip()
+            if choice.lower() == 'b':
+                return main_menu()
             idx = int(choice) - 1
-            if 0 <= idx < len(checkpoints):
-                checkpoint = os.path.join(checkpoint_dir, checkpoints[idx])
+
+            if 0 <= idx < len(sessions_with_checkpoints):
+                # Session checkpoint - game is known
+                session = sessions_with_checkpoints[idx]
+                env = session.game
+
+                # Use best if available, else latest
+                best_path = session.get_checkpoint_path("best")
+                latest_path = session.get_checkpoint_path("latest")
+                checkpoint = best_path if os.path.exists(best_path) else latest_path
                 break
+
+            elif idx < len(sessions_with_checkpoints) + len(legacy_checkpoints):
+                # Legacy checkpoint - ask for game
+                legacy_idx = idx - len(sessions_with_checkpoints)
+                checkpoint = os.path.join(legacy_dir, legacy_checkpoints[legacy_idx])
+
+                env = get_choice("Which game was this trained on?", {
+                    "pong": "🏓 Pong",
+                    "breakout": "🧱 Breakout",
+                    "spaceinvaders": "👾 Space Invaders",
+                    "mario": "🍄 Super Mario Bros",
+                    "pokemon": "🔴 Pokemon Red",
+                    "sonic": "💨 Sonic",
+                })
+                break
+
         except ValueError:
             pass
         print("Invalid choice.")
-
-    env = get_choice("Which game was this trained on?", {
-        "pong": "🏓 Pong",
-        "breakout": "🧱 Breakout",
-        "spaceinvaders": "👾 Space Invaders",
-        "mario": "🍄 Super Mario Bros",
-        "pokemon": "🔴 Pokemon Red",
-        "sonic": "💨 Sonic",
-    })
 
     episodes = get_number("How many episodes to play?", 5, min_val=1, max_val=100)
 
     run_play(env=env, checkpoint=checkpoint, episodes=episodes)
 
 
+def resume_menu():
+    """Resume an incomplete training session."""
+    from sessions import SessionManager
+    from training import Trainer, EpisodeLoggerCallback
+    from utils import get_device
+
+    clear_screen()
+    print_header()
+    print("\n Resume Training\n")
+
+    manager = SessionManager()
+    incomplete = manager.get_incomplete_sessions()
+
+    if not incomplete:
+        print("No incomplete sessions found!")
+        print("Start a new training session from the main menu.")
+        input("\nPress Enter to continue...")
+        return main_menu()
+
+    print("Incomplete sessions:\n")
+    for i, session in enumerate(incomplete, 1):
+        progress = session.progress_percent()
+        best = session.progress.get("best_reward", float("-inf"))
+        if isinstance(best, float) and best != float("-inf"):
+            best_str = f"{best:.1f}"
+        else:
+            best_str = "N/A"
+
+        game_emoji = {
+            "pong": "🏓", "breakout": "🧱", "spaceinvaders": "👾",
+            "mario": "🍄", "pokemon": "🔴", "sonic": "💨"
+        }.get(session.game, "🎮")
+
+        print(f"  {i}. {game_emoji} {session.game.title()}")
+        print(f"     Session: {session.session_id}")
+        print(f"     Progress: {progress:.1f}% | Best reward: {best_str}")
+        print()
+
+    while True:
+        try:
+            choice = input(f"Select session (1-{len(incomplete)}, or 'b' for back): ").strip()
+            if choice.lower() == 'b':
+                return main_menu()
+            idx = int(choice) - 1
+            if 0 <= idx < len(incomplete):
+                session = incomplete[idx]
+                break
+        except ValueError:
+            pass
+        print("Invalid choice.")
+
+    # Ask about dashboard
+    dashboard = confirm("Show live training graphs?", default=True)
+
+    print(f"\nResuming: {session.session_id}")
+    print(f"Game: {session.game}")
+    print(f"Progress: {session.progress_percent():.1f}%")
+    print("\nPress Ctrl+C to stop at any time.\n")
+
+    device = get_device()
+    print(f"Using device: {device}\n")
+
+    # Update training config device
+    training_config = session.get_training_config()
+    training_config.device = device
+
+    callbacks = [EpisodeLoggerCallback(log_interval=20)]
+    trainer = Trainer.from_session(
+        session=session,
+        show_dashboard=dashboard,
+        callbacks=callbacks,
+    )
+
+    try:
+        metrics = trainer.train()
+        print("\n" + "=" * 50)
+        print("  Training Complete!")
+        print("=" * 50)
+        print(f"  Episodes:    {metrics['total_episodes']}")
+        print(f"  Mean reward: {metrics['mean_reward']:.1f}")
+        print(f"  Time:        {metrics['training_time']:.0f}s")
+    except KeyboardInterrupt:
+        print("\n\n Training paused.")
+        print(f"  Session saved: {session.session_id}")
+
+    input("\nPress Enter to continue...")
+
+
+def sessions_menu():
+    """View all training sessions."""
+    from sessions import SessionManager
+
+    clear_screen()
+    print_header()
+    print("\n Training Sessions\n")
+
+    manager = SessionManager()
+    all_sessions = manager.list_sessions()
+
+    if not all_sessions:
+        print("No sessions found!")
+        print("Start a new training session from the main menu.")
+        input("\nPress Enter to continue...")
+        return main_menu()
+
+    # Group by status
+    in_progress = [s for s in all_sessions if s.status == "in_progress"]
+    completed = [s for s in all_sessions if s.status == "completed"]
+
+    if in_progress:
+        print(f"In Progress ({len(in_progress)}):\n")
+        for session in in_progress:
+            progress = session.progress_percent()
+            best = session.progress.get("best_reward", float("-inf"))
+            if isinstance(best, float) and best != float("-inf"):
+                best_str = f"{best:.1f}"
+            else:
+                best_str = "N/A"
+            print(f"  ... {session.session_id}")
+            print(f"      {session.game} | {progress:.1f}% | Best: {best_str}")
+        print()
+
+    if completed:
+        print(f"Completed ({len(completed)}):\n")
+        for session in completed[:5]:  # Show last 5
+            best = session.progress.get("best_reward", float("-inf"))
+            if isinstance(best, float) and best != float("-inf"):
+                best_str = f"{best:.1f}"
+            else:
+                best_str = "N/A"
+            print(f"  Done {session.session_id}")
+            print(f"       {session.game} | Best: {best_str}")
+        if len(completed) > 5:
+            print(f"  ... and {len(completed) - 5} more")
+        print()
+
+    print("=" * 50)
+    print(f"Total: {len(all_sessions)} sessions")
+
+    if in_progress:
+        print("\nTip: Select 'Resume training' from main menu to continue")
+
+    input("\nPress Enter to continue...")
+    return main_menu()
+
+
 def run_training(env, timesteps, n_envs=8, demo_every=25, dashboard=True, entropy=0.02):
     """Run training with given parameters."""
     from config import PPOConfig, TrainingConfig, EnvConfig
-    from training import Trainer, CheckpointCallback, EpisodeLoggerCallback
+    from training import Trainer, SessionCheckpointCallback, EpisodeLoggerCallback
+    from sessions import SessionManager
     from utils import get_device
 
     device = get_device()
-    print(f"\n🖥️  Using device: {device}\n")
+    print(f"\nUsing device: {device}\n")
 
     ppo_config = PPOConfig(ent_coef=entropy)
     env_config = EnvConfig(env_name=env, n_envs=n_envs)
@@ -273,8 +491,18 @@ def run_training(env, timesteps, n_envs=8, demo_every=25, dashboard=True, entrop
         demo_every=demo_every,
     )
 
+    # Create session
+    manager = SessionManager()
+    session = manager.create_session(
+        game=env,
+        env_config=env_config,
+        ppo_config=ppo_config,
+        training_config=training_config,
+    )
+    print(f"Session: {session.session_id}\n")
+
     callbacks = [
-        CheckpointCallback(save_path="checkpoints/best_model.pt"),
+        SessionCheckpointCallback(session),
         EpisodeLoggerCallback(log_interval=20),
     ]
 
@@ -284,19 +512,24 @@ def run_training(env, timesteps, n_envs=8, demo_every=25, dashboard=True, entrop
         training_config=training_config,
         callbacks=callbacks,
         show_dashboard=dashboard,
+        session=session,
     )
 
     try:
         metrics = trainer.train()
         print("\n" + "=" * 50)
-        print("  ✅ Training Complete!")
+        print("  Training Complete!")
         print("=" * 50)
+        print(f"  Session:     {session.session_id}")
         print(f"  Episodes:    {metrics['total_episodes']}")
         print(f"  Mean reward: {metrics['mean_reward']:.1f}")
         print(f"  Time:        {metrics['training_time']:.0f}s")
-        print("\n  Checkpoint saved to: checkpoints/")
+        print(f"\n  Checkpoint saved to: {session.checkpoint_dir}")
     except KeyboardInterrupt:
-        print("\n\n⏹️  Training stopped.")
+        print("\n\n Training paused.")
+        print(f"  Session saved: {session.session_id}")
+        print(f"  Resume from main menu or run:")
+        print(f"    python main.py resume --session {session.session_id}")
 
     input("\nPress Enter to continue...")
 

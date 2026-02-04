@@ -7,11 +7,12 @@ in the training loop without modifying the core training code.
 
 import os
 import numpy as np
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional
 from abc import ABC, abstractmethod
 
 if TYPE_CHECKING:
     from .trainer import Trainer
+    from sessions import Session
 
 
 class BaseCallback(ABC):
@@ -163,3 +164,70 @@ class EarlyStoppingCallback(BaseCallback):
 
     def on_training_end(self, trainer: "Trainer"):
         pass
+
+
+class SessionCheckpointCallback(BaseCallback):
+    """
+    Session-aware checkpointing callback.
+
+    Saves checkpoints with full session metadata and maintains
+    a 'latest.pt' symlink for easy resume.
+    """
+
+    def __init__(
+        self,
+        session: "Session",
+        save_interval: int = 50,
+    ):
+        """
+        Initialize session checkpoint callback.
+
+        Args:
+            session: Session to save checkpoints for
+            save_interval: Save checkpoint every N updates
+        """
+        self.session = session
+        self.save_interval = save_interval
+        self.best_mean_reward = float("-inf")
+        self.num_updates = 0
+
+    def on_training_start(self, trainer: "Trainer"):
+        os.makedirs(self.session.checkpoint_dir, exist_ok=True)
+        print(f"Session checkpoints: {self.session.checkpoint_dir}")
+
+    def on_step(self, trainer: "Trainer"):
+        self.num_updates += 1
+
+        # Save periodic checkpoint
+        if self.num_updates % self.save_interval == 0:
+            self._save_checkpoint(trainer, f"checkpoint_{self.num_updates}")
+
+        # Always update latest
+        self._save_checkpoint(trainer, "latest")
+
+        # Track best model
+        if len(trainer.episode_rewards) > 0:
+            mean_reward = np.mean(trainer.episode_rewards)
+            if mean_reward > self.best_mean_reward:
+                self.best_mean_reward = mean_reward
+                self._save_checkpoint(trainer, "best")
+                print(f"New best reward: {mean_reward:.2f}")
+
+        # Update session progress
+        self.session.update_progress(
+            timesteps=trainer.agent.num_timesteps,
+            episodes=trainer.total_episodes,
+            updates=self.num_updates,
+            best_reward=self.best_mean_reward if self.best_mean_reward > float("-inf") else None,
+        )
+
+    def on_training_end(self, trainer: "Trainer"):
+        # Final save
+        self._save_checkpoint(trainer, "final")
+        self.session.mark_completed()
+        print(f"Session completed: {self.session.session_id}")
+
+    def _save_checkpoint(self, trainer: "Trainer", name: str):
+        """Save a checkpoint with session metadata."""
+        path = self.session.get_checkpoint_path(name)
+        trainer.agent.save(path, session=self.session, full_state=True)

@@ -510,20 +510,63 @@ class PPO:
 
             return actions
 
-    def save(self, path: str):
-        """Save model checkpoint."""
-        torch.save(
-            {
-                "network_state_dict": self.network.state_dict(),
-                "optimizer_state_dict": self.optimizer.state_dict(),
-                "num_timesteps": self.num_timesteps,
-            },
-            path,
-        )
+    def save(self, path: str, session=None, full_state: bool = True):
+        """
+        Save model checkpoint.
 
-    def load(self, path: str):
-        """Load model checkpoint."""
+        Args:
+            path: Path to save checkpoint
+            session: Optional Session object for metadata
+            full_state: If True, include RNG states for exact reproducibility
+        """
+        from sessions import capture_rng_states
+        from config import config_to_dict
+
+        checkpoint = {
+            # Core state (always included, backwards compatible)
+            "network_state_dict": self.network.state_dict(),
+            "optimizer_state_dict": self.optimizer.state_dict(),
+            "num_timesteps": self.num_timesteps,
+            # Version marker for format detection
+            "version": "2.0",
+        }
+
+        # Add session metadata if available
+        if session is not None:
+            checkpoint["session_id"] = session.session_id
+            checkpoint["game"] = session.game
+            checkpoint["env_config"] = session.env_config
+            checkpoint["ppo_config"] = session.ppo_config
+            checkpoint["training_config"] = session.training_config
+
+        # Add RNG states for exact reproducibility
+        if full_state:
+            checkpoint["rng_states"] = capture_rng_states()
+
+        torch.save(checkpoint, path)
+
+    def load(self, path: str, restore_rng: bool = False) -> dict:
+        """
+        Load model checkpoint.
+
+        Args:
+            path: Path to checkpoint file
+            restore_rng: If True and checkpoint has RNG states, restore them
+
+        Returns:
+            Full checkpoint dictionary (caller can use metadata)
+        """
+        from sessions import restore_rng_states
+
         checkpoint = torch.load(path, map_location=self.device, weights_only=False)
+
+        # Load core state
         self.network.load_state_dict(checkpoint["network_state_dict"])
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.num_timesteps = checkpoint.get("num_timesteps", 0)
+
+        # Restore RNG states if requested and available
+        if restore_rng and "rng_states" in checkpoint:
+            restore_rng_states(checkpoint["rng_states"])
+
+        return checkpoint

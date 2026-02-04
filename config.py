@@ -5,9 +5,12 @@ This module centralizes all tunable parameters, making it easy to
 experiment with different settings without modifying code.
 """
 
-from dataclasses import dataclass, field
-from typing import Optional
+from dataclasses import dataclass, field, fields, asdict
+from typing import Optional, Type, TypeVar
 import torch
+
+
+T = TypeVar("T")
 
 
 @dataclass
@@ -116,3 +119,34 @@ def get_default_config():
         "training": TrainingConfig(),
         "env": EnvConfig(),
     }
+
+
+def config_to_dict(config) -> dict:
+    """
+    Convert a dataclass config to a dictionary for JSON serialization.
+
+    Handles special cases like device field that may not be JSON-serializable.
+    """
+    return asdict(config)
+
+
+def config_from_dict(config_class: Type[T], data: dict) -> T:
+    """
+    Create a config dataclass from a dictionary.
+
+    Only uses fields that exist in the config class, ignoring unknown keys.
+    This allows backwards compatibility when config fields are added/removed.
+
+    Args:
+        config_class: The dataclass type to create (e.g., PPOConfig)
+        data: Dictionary of field values
+
+    Returns:
+        Instance of config_class with values from data
+    """
+    if data is None:
+        return config_class()
+
+    known_fields = {f.name for f in fields(config_class)}
+    filtered = {k: v for k, v in data.items() if k in known_fields}
+    return config_class(**filtered)

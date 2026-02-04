@@ -8,6 +8,7 @@ from .callbacks import (
     CheckpointCallback,
     EpisodeLoggerCallback,
     VideoRecorderCallback,
+    SessionCheckpointCallback,
 )
 
 __all__ = [
@@ -16,4 +17,5 @@ __all__ = [
     "CheckpointCallback",
     "EpisodeLoggerCallback",
     "VideoRecorderCallback",
+    "SessionCheckpointCallback",
 ]

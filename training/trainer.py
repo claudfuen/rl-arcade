@@ -23,6 +23,12 @@ from environments import make_vec_env, make_env
 from config import PPOConfig, TrainingConfig, EnvConfig
 from .callbacks import BaseCallback
 
+# Optional session import (for backwards compatibility)
+try:
+    from sessions import Session
+except ImportError:
+    Session = None
+
 
 class Trainer:
     """
@@ -44,6 +50,7 @@ class Trainer:
         training_config: TrainingConfig = None,
         callbacks: List[BaseCallback] = None,
         show_dashboard: bool = False,
+        session: "Session" = None,
     ):
         """
         Initialize trainer.
@@ -54,12 +61,19 @@ class Trainer:
             training_config: Training loop configuration
             callbacks: List of callback objects
             show_dashboard: Whether to show live matplotlib dashboard
+            session: Optional Session for tracking and resume support
         """
         self.env_config = env_config or EnvConfig()
         self.ppo_config = ppo_config or PPOConfig()
         self.training_config = training_config or TrainingConfig()
         self.callbacks = callbacks or []
         self.show_dashboard = show_dashboard
+        self.session = session
+
+        # If session provided, override directories to use session paths
+        if session is not None:
+            self.training_config.checkpoint_dir = session.checkpoint_dir
+            self.training_config.log_dir = session.log_dir
 
         # Create directories
         os.makedirs(self.training_config.checkpoint_dir, exist_ok=True)
@@ -121,6 +135,54 @@ class Trainer:
         # Timing
         self.start_time = None
 
+    @classmethod
+    def from_session(
+        cls,
+        session: "Session",
+        show_dashboard: bool = False,
+        callbacks: List[BaseCallback] = None,
+    ) -> "Trainer":
+        """
+        Create a Trainer from a saved session, ready to resume training.
+
+        Args:
+            session: Session to resume
+            show_dashboard: Whether to show live training dashboard
+            callbacks: Additional callbacks (SessionCheckpointCallback added automatically)
+
+        Returns:
+            Trainer instance with agent state restored from session checkpoint
+        """
+        from .callbacks import SessionCheckpointCallback
+
+        # Get configs from session
+        env_config = session.get_env_config()
+        ppo_config = session.get_ppo_config()
+        training_config = session.get_training_config()
+
+        # Setup callbacks - always include session checkpoint callback
+        callbacks = callbacks or []
+        callbacks.insert(0, SessionCheckpointCallback(session))
+
+        # Create trainer
+        trainer = cls(
+            env_config=env_config,
+            ppo_config=ppo_config,
+            training_config=training_config,
+            callbacks=callbacks,
+            show_dashboard=show_dashboard,
+            session=session,
+        )
+
+        # Load checkpoint if exists
+        latest_path = session.get_checkpoint_path("latest")
+        if os.path.exists(latest_path):
+            print(f"Resuming from checkpoint: {latest_path}")
+            trainer.agent.load(latest_path, restore_rng=True)
+            print(f"  Timesteps: {trainer.agent.num_timesteps:,}")
+
+        return trainer
+
     def _create_render_env(self):
         """Create an environment for visualization."""
         import gymnasium as gym
@@ -141,7 +203,7 @@ class Trainer:
                 MaxAndSkipWrapper,
             )
 
-            base_env = gym.make(ENV_IDS[env_name], render_mode="rgb_array")
+            base_env = gym.make(ENV_IDS[env_name], render_mode="human")
             base_env = MaxAndSkipWrapper(base_env, skip=4)
             base_env = GrayscaleWrapper(base_env)
             base_env = ResizeWrapper(base_env)
@@ -501,8 +563,23 @@ class Trainer:
                 f"checkpoint_{num_updates}.pt",
             )
 
-        self.agent.save(path)
+        # Save with session metadata if available
+        self.agent.save(path, session=self.session)
         print(f"Checkpoint saved: {path}")
+
+        # Update session progress if available
+        if self.session is not None:
+            mean_reward = np.mean(self.episode_rewards) if self.episode_rewards else None
+            self.session.update_progress(
+                timesteps=self.agent.num_timesteps,
+                episodes=self.total_episodes,
+                updates=num_updates,
+                best_reward=mean_reward,
+            )
+
+            # Mark completed if final
+            if final:
+                self.session.mark_completed()
 
     def _get_final_metrics(self) -> Dict:
         """Return final training metrics."""
