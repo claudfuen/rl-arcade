@@ -263,6 +263,8 @@ class Session:
         dashboard_file = os.path.join(self.session_dir, "dashboard_state.json")
         with open(dashboard_file, "w") as f:
             json.dump(state, f)
+        num_episodes = len(state.get("rewards", []))
+        print(f"  Dashboard state saved: {num_episodes} episodes -> {dashboard_file}")
 
     def load_dashboard_state(self) -> dict:
         """Load dashboard state from session directory."""
@@ -270,6 +272,7 @@ class Session:
         if os.path.exists(dashboard_file):
             with open(dashboard_file, "r") as f:
                 return json.load(f)
+        print(f"  No dashboard state at: {dashboard_file}")
         return None
 
 
