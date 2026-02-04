@@ -2,6 +2,12 @@
 Environment module for RL training.
 
 Provides preprocessed game environments ready for neural network training.
+
+Supported games:
+    - Atari: pong, breakout, spaceinvaders
+    - Nintendo: mario
+    - Game Boy: pokemon (requires ROM)
+    - Sega: sonic (requires ROM)
 """
 
 from .wrappers import (

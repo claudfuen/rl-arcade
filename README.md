@@ -57,8 +57,27 @@ That's it! You'll see a Pong agent go from random flailing to actually winning.
 | 🧱 **Breakout** | Medium | ~30 min | Break bricks with a ball. Satisfying to watch. |
 | 👾 **Space Invaders** | Medium | ~45 min | Shoot descending aliens. |
 | 🍄 **Super Mario Bros** | Hard | ~2 hours | Navigate World 1-1. The ultimate test. |
+| 🔴 **Pokemon Red** | Hard | ~4+ hours | Catch Pokemon, beat gym leaders! Requires ROM. |
+| 💨 **Sonic** | Hard | ~2 hours | Gotta go fast! Requires ROM + gym-retro. |
 
 *Training times are rough estimates for visible improvement on an M1 Mac.*
+
+### ROM-Based Games Setup
+
+**Pokemon Red/Blue:**
+```bash
+# Place your ROM in the roms folder
+mkdir -p roms
+cp /path/to/pokemon_red.gb roms/
+python3 cli.py  # Select Pokemon
+```
+
+**Sonic the Hedgehog:**
+```bash
+pip install gym-retro
+python -m retro.import /path/to/your/sonic/rom/
+python3 cli.py  # Select Sonic
+```
 
 ---
 
@@ -257,11 +276,13 @@ isort .
 - [x] Super Mario Bros
 - [x] Interactive CLI
 - [x] Live training dashboard
-- [ ] Pokemon Red/Blue (Game Boy) 🔜
-- [ ] Sonic the Hedgehog
+- [x] Pokemon Red/Blue (Game Boy)
+- [x] Sonic the Hedgehog
 - [ ] Save/load training progress
 - [ ] Hyperparameter tuning guide
 - [ ] Pre-trained model zoo
+- [ ] Tetris, Pac-Man
+- [ ] Multi-agent support
 
 ---
 

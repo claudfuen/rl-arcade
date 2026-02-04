@@ -31,11 +31,12 @@ videos/
 # Jupyter
 .ipynb_checkpoints/
 
-# ROMs (user must provide)
-roms/
+# ROMs (user must provide their own)
 *.nes
 *.gb
 *.gbc
+*.smd
+*.bin
 
 # Misc
 *.log

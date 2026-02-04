@@ -105,8 +105,24 @@ def quick_demo():
         "pong": "🏓 Pong (easiest, learns fastest)",
         "breakout": "🧱 Breakout (medium difficulty)",
         "spaceinvaders": "👾 Space Invaders (harder)",
-        "mario": "🍄 Super Mario Bros (hardest)",
+        "mario": "🍄 Super Mario Bros (hard)",
+        "pokemon": "🔴 Pokemon Red (requires ROM)",
+        "sonic": "💨 Sonic the Hedgehog (requires ROM)",
     })
+
+    # Check for ROM requirements
+    if env == "pokemon":
+        print("\n⚠️  Pokemon requires a ROM file!")
+        print("   Place 'pokemon_red.gb' in the 'roms/' folder.")
+        if not confirm("\nDo you have the ROM ready?", default=False):
+            return main_menu()
+
+    if env == "sonic":
+        print("\n⚠️  Sonic requires gym-retro and a ROM!")
+        print("   1. pip install gym-retro")
+        print("   2. python -m retro.import /path/to/roms/")
+        if not confirm("\nDo you have it set up?", default=False):
+            return main_menu()
 
     print(f"\n🚀 Starting {env.title()} training with demo every 25 updates...")
     print("   Watch the agent improve over time!")
@@ -133,7 +149,20 @@ def train_menu():
         "breakout": "🧱 Breakout",
         "spaceinvaders": "👾 Space Invaders",
         "mario": "🍄 Super Mario Bros",
+        "pokemon": "🔴 Pokemon Red (requires ROM)",
+        "sonic": "💨 Sonic (requires ROM)",
     })
+
+    # Check for ROM requirements
+    if env == "pokemon":
+        print("\n⚠️  Pokemon requires: roms/pokemon_red.gb")
+        if not confirm("Continue?", default=True):
+            return main_menu()
+
+    if env == "sonic":
+        print("\n⚠️  Sonic requires gym-retro setup")
+        if not confirm("Continue?", default=True):
+            return main_menu()
 
     # Duration
     print("\n📊 Training Duration")
@@ -218,6 +247,8 @@ def play_menu():
         "breakout": "🧱 Breakout",
         "spaceinvaders": "👾 Space Invaders",
         "mario": "🍄 Super Mario Bros",
+        "pokemon": "🔴 Pokemon Red",
+        "sonic": "💨 Sonic",
     })
 
     episodes = get_number("How many episodes to play?", 5, min_val=1, max_val=100)

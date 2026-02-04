@@ -6,6 +6,12 @@ ale-py>=0.8.1
 gym-super-mario-bros>=7.4.0
 nes-py>=8.2.1
 
+# Game Boy emulator (for Pokemon)
+pyboy>=2.0.0
+
+# Sega Genesis emulator (for Sonic) - optional
+# gym-retro>=0.9.0
+
 # Deep learning
 torch>=2.0.0
 

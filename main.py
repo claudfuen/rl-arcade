@@ -21,10 +21,12 @@ Usage:
     python3 main.py play --env breakout --checkpoint checkpoints/best_model.pt
 
 Supported environments:
+    - pong: Atari Pong (easiest, quick to train)
     - breakout: Atari Breakout (good starting point)
-    - pong: Atari Pong (quick to train)
     - spaceinvaders: Atari Space Invaders
-    - mario: Super Mario Bros (more challenging)
+    - mario: Super Mario Bros (challenging)
+    - pokemon: Pokemon Red/Blue (requires ROM in roms/)
+    - sonic: Sonic the Hedgehog (requires gym-retro setup)
 """
 
 import argparse
@@ -56,7 +58,7 @@ def parse_args():
         "--env",
         type=str,
         default="pong",
-        choices=list(ENV_IDS.keys()) + ["mario"],
+        choices=["pong", "breakout", "spaceinvaders", "mario", "pokemon", "sonic"],
         help="Environment (default: pong)",
     )
 
@@ -66,7 +68,7 @@ def parse_args():
         "--env",
         type=str,
         default="breakout",
-        choices=list(ENV_IDS.keys()) + ["mario"],
+        choices=["pong", "breakout", "spaceinvaders", "mario", "pokemon", "sonic"],
         help="Environment to train on (default: breakout)",
     )
     train_parser.add_argument(
@@ -146,7 +148,7 @@ def parse_args():
         "--env",
         type=str,
         default="breakout",
-        choices=list(ENV_IDS.keys()) + ["mario"],
+        choices=["pong", "breakout", "spaceinvaders", "mario", "pokemon", "sonic"],
         help="Environment to play",
     )
     play_parser.add_argument(

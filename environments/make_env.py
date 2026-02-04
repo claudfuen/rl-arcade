@@ -196,6 +196,8 @@ def make_env(
     - "pong": Atari Pong (quick to train)
     - "spaceinvaders": Atari Space Invaders
     - "mario": Super Mario Bros (more complex)
+    - "pokemon": Pokemon Red/Blue (requires ROM)
+    - "sonic": Sonic the Hedgehog (requires ROM)
 
     Args:
         env_name: Short name of the environment
@@ -217,7 +219,23 @@ def make_env(
             frame_height=frame_height,
             frame_width=frame_width,
         )
-    elif env_name in ENV_IDS:
+    elif env_name == "pokemon":
+        from .pokemon import make_pokemon_env
+        return make_pokemon_env(
+            frame_stack=frame_stack,
+            frame_height=frame_height,
+            frame_width=frame_width,
+            **kwargs,
+        )
+    elif env_name == "sonic":
+        from .sonic import make_sonic_env
+        return make_sonic_env(
+            frame_stack=frame_stack,
+            frame_height=frame_height,
+            frame_width=frame_width,
+            **kwargs,
+        )
+    elif env_name in ["breakout", "pong", "spaceinvaders"]:
         return make_atari_env(
             env_id=ENV_IDS[env_name],
             frame_skip=frame_skip,
@@ -229,7 +247,7 @@ def make_env(
     else:
         raise ValueError(
             f"Unknown environment: {env_name}. "
-            f"Supported: {list(ENV_IDS.keys()) + ['mario']}"
+            f"Supported: breakout, pong, spaceinvaders, mario, pokemon, sonic"
         )
 
 

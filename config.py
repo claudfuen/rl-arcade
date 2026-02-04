@@ -103,6 +103,8 @@ ENV_IDS = {
     "pong": "ALE/Pong-v5",
     "spaceinvaders": "ALE/SpaceInvaders-v5",
     "mario": "SuperMarioBros-v0",
+    "pokemon": "pokemon_red",
+    "sonic": "SonicTheHedgehog-Genesis",
 }
 
 
