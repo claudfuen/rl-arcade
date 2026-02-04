@@ -200,6 +200,8 @@ class Trainer:
             for l in dashboard_state.get("lengths", []):
                 trainer.episode_lengths.append(l)
             trainer.total_episodes = len(dashboard_state.get("rewards", []))
+        else:
+            print("  No dashboard state found (older session or first run)")
 
         return trainer
 

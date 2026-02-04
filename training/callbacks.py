@@ -228,6 +228,10 @@ class SessionCheckpointCallback(BaseCallback):
         print(f"Session completed: {self.session.session_id}")
 
     def _save_checkpoint(self, trainer: "Trainer", name: str):
-        """Save a checkpoint with session metadata."""
+        """Save a checkpoint with session metadata and dashboard state."""
         path = self.session.get_checkpoint_path(name)
         trainer.agent.save(path, session=self.session, full_state=True)
+
+        # Save dashboard state for graph restoration on resume
+        if trainer.dashboard is not None:
+            self.session.save_dashboard_state(trainer.dashboard.export_state())
