@@ -39,6 +39,7 @@ class TrainingDashboard:
         update_interval: float = 0.5,
         figsize: tuple = (14, 10),
         demo_every: int = 25,
+        total_timesteps: int = 1_000_000,
     ):
         """
         Initialize the dashboard.
@@ -48,6 +49,7 @@ class TrainingDashboard:
             update_interval: Minimum seconds between display updates
             figsize: Figure size (width, height) in inches
             demo_every: Initial demo interval (0=disabled)
+            total_timesteps: Initial training length target
         """
         self.window_size = window_size
         self.update_interval = update_interval
@@ -67,6 +69,9 @@ class TrainingDashboard:
         self._skip_demo_requested = False
         self._demo_active = False
         self._demo_every = demo_every
+
+        # Training length control
+        self._total_timesteps = total_timesteps
 
         # Setup matplotlib
         plt.ion()  # Interactive mode
@@ -133,23 +138,38 @@ class TrainingDashboard:
         (self.line_entropy,) = self.ax_entropy.plot([], [], "m-", linewidth=1.5)
 
     def _setup_controls(self):
-        """Setup dashboard controls (demo slider and skip button)."""
+        """Setup dashboard controls (sliders and skip button)."""
         # Demo interval slider (left side)
-        self.slider_ax = self.fig.add_axes([0.1, 0.02, 0.35, 0.03])
+        self.demo_slider_ax = self.fig.add_axes([0.08, 0.02, 0.25, 0.025])
         self.demo_slider = Slider(
-            self.slider_ax,
-            "Demo every",
+            self.demo_slider_ax,
+            "",
             valmin=0,
             valmax=100,
             valinit=self._demo_every,
             valstep=5,
             color="lightblue",
         )
-        self.demo_slider.on_changed(self._on_slider_changed)
-        self._update_slider_label()
+        self.demo_slider.on_changed(self._on_demo_slider_changed)
+        self._update_demo_label()
+
+        # Training length slider (center) - in thousands
+        initial_k = self._total_timesteps // 1000
+        self.length_slider_ax = self.fig.add_axes([0.38, 0.02, 0.25, 0.025])
+        self.length_slider = Slider(
+            self.length_slider_ax,
+            "",
+            valmin=50,
+            valmax=5000,
+            valinit=initial_k,
+            valstep=50,
+            color="lightgreen",
+        )
+        self.length_slider.on_changed(self._on_length_slider_changed)
+        self._update_length_label()
 
         # Skip demo button (right side, initially hidden)
-        self.skip_button_ax = self.fig.add_axes([0.55, 0.02, 0.15, 0.03])
+        self.skip_button_ax = self.fig.add_axes([0.68, 0.02, 0.12, 0.025])
         self.skip_button = Button(
             self.skip_button_ax,
             "Skip Demo",
@@ -159,17 +179,27 @@ class TrainingDashboard:
         self.skip_button.on_clicked(self._on_skip_clicked)
         self.skip_button_ax.set_visible(False)
 
-    def _on_slider_changed(self, val):
+    def _on_demo_slider_changed(self, val):
         """Handle demo interval slider change."""
         self._demo_every = int(val)
-        self._update_slider_label()
+        self._update_demo_label()
 
-    def _update_slider_label(self):
-        """Update slider label to show current value."""
+    def _on_length_slider_changed(self, val):
+        """Handle training length slider change."""
+        self._total_timesteps = int(val) * 1000
+        self._update_length_label()
+
+    def _update_demo_label(self):
+        """Update demo slider label."""
         if self._demo_every == 0:
-            self.slider_ax.set_title("Demo: OFF", fontsize=9, loc="left")
+            self.demo_slider_ax.set_title("Demo: OFF", fontsize=9, loc="left")
         else:
-            self.slider_ax.set_title(f"Demo every {self._demo_every} updates", fontsize=9, loc="left")
+            self.demo_slider_ax.set_title(f"Demo every {self._demo_every}", fontsize=9, loc="left")
+
+    def _update_length_label(self):
+        """Update training length slider label."""
+        k = self._total_timesteps // 1000
+        self.length_slider_ax.set_title(f"Train: {k}K steps", fontsize=9, loc="left")
 
     def _on_skip_clicked(self, event):
         """Handle skip button click."""
@@ -185,6 +215,17 @@ class TrainingDashboard:
         """Set demo interval and update slider."""
         self._demo_every = max(0, min(100, value))
         self.demo_slider.set_val(self._demo_every)
+
+    @property
+    def total_timesteps(self) -> int:
+        """Get current training length target."""
+        return self._total_timesteps
+
+    @total_timesteps.setter
+    def total_timesteps(self, value: int):
+        """Set training length and update slider."""
+        self._total_timesteps = max(50000, min(5_000_000, value))
+        self.length_slider.set_val(self._total_timesteps // 1000)
 
     def demo_started(self):
         """Call when a demo episode starts."""

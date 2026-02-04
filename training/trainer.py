@@ -133,7 +133,8 @@ class Trainer:
         if show_dashboard:
             from visualization import TrainingDashboard
             self.dashboard = TrainingDashboard(
-                demo_every=self.training_config.demo_every
+                demo_every=self.training_config.demo_every,
+                total_timesteps=self.training_config.total_timesteps,
             )
 
         # Timing
@@ -320,7 +321,12 @@ class Trainer:
         for callback in self.callbacks:
             callback.on_training_start(self)
 
-        while self.agent.num_timesteps < total_timesteps:
+        while True:
+            # Check training target (dashboard value takes precedence if available)
+            target = self.dashboard.total_timesteps if self.dashboard else total_timesteps
+            if self.agent.num_timesteps >= target:
+                break
+
             # Collect rollout (and render if enabled)
             obs, render_obs = self._collect_rollout_with_tracking(obs, render_obs)
 
