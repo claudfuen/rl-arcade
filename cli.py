@@ -194,7 +194,7 @@ def train_menu():
     # Visualization
     print("\n👁️  Visualization")
     dashboard = confirm("Show live training graphs?", default=True)
-    demo_every = get_number("Show demo game every N updates (0=never)", 25, min_val=0)
+    demo_every = get_number("Show demo game every N updates (0=never)", 25, min_val=0, max_val=500)
 
     # Performance
     print("\n⚡ Performance")
@@ -390,7 +390,7 @@ def resume_menu():
 
         # Demo interval
         current_demo = training_config.demo_every
-        new_demo = get_number(f"  Demo every N updates (0=off)", current_demo, min_val=0, max_val=200)
+        new_demo = get_number(f"  Demo every N updates (0=off)", current_demo, min_val=0, max_val=500)
         if new_demo != current_demo:
             training_config.demo_every = new_demo
             print(f"    -> Changed to {new_demo}")

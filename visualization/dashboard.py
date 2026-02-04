@@ -139,14 +139,14 @@ class TrainingDashboard:
 
     def _setup_controls(self):
         """Setup dashboard controls (sliders and skip button)."""
-        # Demo interval slider (left side)
+        # Demo interval slider (left side) - in updates (each update = n_steps * n_envs timesteps)
         self.demo_slider_ax = self.fig.add_axes([0.08, 0.02, 0.25, 0.025])
         self.demo_slider = Slider(
             self.demo_slider_ax,
             "",
             valmin=0,
-            valmax=100,
-            valinit=self._demo_every,
+            valmax=500,
+            valinit=min(self._demo_every, 500),
             valstep=5,
             color="lightblue",
         )
@@ -194,7 +194,7 @@ class TrainingDashboard:
         if self._demo_every == 0:
             self.demo_slider_ax.set_title("Demo: OFF", fontsize=9, loc="left")
         else:
-            self.demo_slider_ax.set_title(f"Demo every {self._demo_every}", fontsize=9, loc="left")
+            self.demo_slider_ax.set_title(f"Demo every {self._demo_every} updates", fontsize=9, loc="left")
 
     def _update_length_label(self):
         """Update training length slider label."""
@@ -213,7 +213,7 @@ class TrainingDashboard:
     @demo_every.setter
     def demo_every(self, value: int):
         """Set demo interval and update slider."""
-        self._demo_every = max(0, min(100, value))
+        self._demo_every = max(0, min(500, value))
         self.demo_slider.set_val(self._demo_every)
 
     @property
