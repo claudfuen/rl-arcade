@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# Virtual environments
+venv/
+env/
+.env
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Training outputs
+checkpoints/
+logs/
+videos/
+*.pt
+*.pth
+
+# Jupyter
+.ipynb_checkpoints/
+
+# ROMs (user must provide)
+roms/
+*.nes
+*.gb
+*.gbc
+
+# Misc
+*.log
+.coverage
+htmlcov/

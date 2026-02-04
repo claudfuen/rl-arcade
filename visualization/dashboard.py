@@ -1,0 +1,294 @@
+"""
+Real-time training dashboard using matplotlib.
+
+Provides live visualization of training progress including:
+- Reward curves
+- Loss plots
+- Episode statistics
+- Live game preview (optional)
+"""
+
+import matplotlib.pyplot as plt
+import numpy as np
+from collections import deque
+from typing import Optional, Deque
+import time
+
+
+class TrainingDashboard:
+    """
+    Real-time matplotlib dashboard for monitoring training.
+
+    Creates a figure with multiple subplots:
+    - Reward over episodes (with rolling average)
+    - Policy and value losses
+    - Episode lengths
+    - Entropy over time
+
+    Usage:
+        dashboard = TrainingDashboard()
+        for episode in training_loop:
+            dashboard.update(reward=score, length=steps, losses=loss_dict)
+        dashboard.close()
+    """
+
+    def __init__(
+        self,
+        window_size: int = 100,
+        update_interval: float = 0.5,
+        figsize: tuple = (14, 10),
+    ):
+        """
+        Initialize the dashboard.
+
+        Args:
+            window_size: Rolling window for averaging
+            update_interval: Minimum seconds between display updates
+            figsize: Figure size (width, height) in inches
+        """
+        self.window_size = window_size
+        self.update_interval = update_interval
+        self.last_update_time = 0
+
+        # Data storage
+        self.rewards: Deque[float] = deque(maxlen=10000)
+        self.lengths: Deque[float] = deque(maxlen=10000)
+        self.policy_losses: Deque[float] = deque(maxlen=10000)
+        self.value_losses: Deque[float] = deque(maxlen=10000)
+        self.entropies: Deque[float] = deque(maxlen=10000)
+        self.timesteps: Deque[int] = deque(maxlen=10000)
+
+        self.current_timestep = 0
+
+        # Setup matplotlib
+        plt.ion()  # Interactive mode
+        self.fig, self.axes = plt.subplots(2, 2, figsize=figsize)
+        self.fig.suptitle("PPO Training Dashboard", fontsize=14, fontweight="bold")
+
+        # Initialize plots
+        self._setup_plots()
+
+        plt.tight_layout()
+        plt.show(block=False)
+        plt.pause(0.1)
+
+    def _setup_plots(self):
+        """Initialize empty plots with labels and styling."""
+        # Reward plot (top left)
+        self.ax_reward = self.axes[0, 0]
+        self.ax_reward.set_title("Episode Reward")
+        self.ax_reward.set_xlabel("Episode")
+        self.ax_reward.set_ylabel("Reward")
+        self.ax_reward.grid(True, alpha=0.3)
+        (self.line_reward,) = self.ax_reward.plot([], [], "b-", alpha=0.3, label="Raw")
+        (self.line_reward_avg,) = self.ax_reward.plot(
+            [], [], "b-", linewidth=2, label=f"Rolling Avg ({self.window_size})"
+        )
+        self.ax_reward.legend(loc="upper left")
+
+        # Loss plot (top right)
+        self.ax_loss = self.axes[0, 1]
+        self.ax_loss.set_title("Training Losses")
+        self.ax_loss.set_xlabel("Update")
+        self.ax_loss.set_ylabel("Loss")
+        self.ax_loss.grid(True, alpha=0.3)
+        (self.line_policy,) = self.ax_loss.plot(
+            [], [], "r-", linewidth=1.5, label="Policy"
+        )
+        (self.line_value,) = self.ax_loss.plot(
+            [], [], "g-", linewidth=1.5, label="Value"
+        )
+        self.ax_loss.legend(loc="upper right")
+
+        # Episode length plot (bottom left)
+        self.ax_length = self.axes[1, 0]
+        self.ax_length.set_title("Episode Length")
+        self.ax_length.set_xlabel("Episode")
+        self.ax_length.set_ylabel("Steps")
+        self.ax_length.grid(True, alpha=0.3)
+        (self.line_length,) = self.ax_length.plot([], [], "g-", alpha=0.3)
+        (self.line_length_avg,) = self.ax_length.plot(
+            [], [], "g-", linewidth=2, label=f"Rolling Avg"
+        )
+        self.ax_length.legend(loc="upper left")
+
+        # Entropy plot (bottom right)
+        self.ax_entropy = self.axes[1, 1]
+        self.ax_entropy.set_title("Policy Entropy")
+        self.ax_entropy.set_xlabel("Update")
+        self.ax_entropy.set_ylabel("Entropy")
+        self.ax_entropy.grid(True, alpha=0.3)
+        (self.line_entropy,) = self.ax_entropy.plot([], [], "m-", linewidth=1.5)
+
+    def update(
+        self,
+        reward: Optional[float] = None,
+        length: Optional[float] = None,
+        policy_loss: Optional[float] = None,
+        value_loss: Optional[float] = None,
+        entropy: Optional[float] = None,
+        timestep: Optional[int] = None,
+    ):
+        """
+        Update dashboard with new data.
+
+        Args:
+            reward: Episode reward (if episode ended)
+            length: Episode length (if episode ended)
+            policy_loss: Policy loss from training update
+            value_loss: Value loss from training update
+            entropy: Entropy from training update
+            timestep: Current timestep
+        """
+        # Store data
+        if reward is not None:
+            self.rewards.append(reward)
+        if length is not None:
+            self.lengths.append(length)
+        if policy_loss is not None:
+            self.policy_losses.append(policy_loss)
+        if value_loss is not None:
+            self.value_losses.append(value_loss)
+        if entropy is not None:
+            self.entropies.append(entropy)
+        if timestep is not None:
+            self.current_timestep = timestep
+            self.timesteps.append(timestep)
+
+        # Throttle display updates
+        current_time = time.time()
+        if current_time - self.last_update_time < self.update_interval:
+            return
+        self.last_update_time = current_time
+
+        self._refresh_display()
+
+    def _refresh_display(self):
+        """Redraw all plots with current data."""
+        # Update reward plot
+        if len(self.rewards) > 0:
+            episodes = np.arange(len(self.rewards))
+            rewards = np.array(self.rewards)
+
+            self.line_reward.set_data(episodes, rewards)
+
+            # Rolling average
+            avg_rewards = self._rolling_average(rewards, self.window_size)
+            self.line_reward_avg.set_data(episodes, avg_rewards)
+
+            self.ax_reward.relim()
+            self.ax_reward.autoscale_view()
+
+        # Update loss plot
+        if len(self.policy_losses) > 0:
+            updates = np.arange(len(self.policy_losses))
+
+            self.line_policy.set_data(updates, np.array(self.policy_losses))
+            self.line_value.set_data(updates, np.array(self.value_losses))
+
+            self.ax_loss.relim()
+            self.ax_loss.autoscale_view()
+
+        # Update length plot
+        if len(self.lengths) > 0:
+            episodes = np.arange(len(self.lengths))
+            lengths = np.array(self.lengths)
+
+            self.line_length.set_data(episodes, lengths)
+
+            avg_lengths = self._rolling_average(lengths, self.window_size)
+            self.line_length_avg.set_data(episodes, avg_lengths)
+
+            self.ax_length.relim()
+            self.ax_length.autoscale_view()
+
+        # Update entropy plot
+        if len(self.entropies) > 0:
+            updates = np.arange(len(self.entropies))
+            self.line_entropy.set_data(updates, np.array(self.entropies))
+
+            self.ax_entropy.relim()
+            self.ax_entropy.autoscale_view()
+
+        # Update title with stats
+        if len(self.rewards) > 0:
+            recent_avg = np.mean(list(self.rewards)[-self.window_size :])
+            self.fig.suptitle(
+                f"PPO Training Dashboard | "
+                f"Episodes: {len(self.rewards)} | "
+                f"Timesteps: {self.current_timestep:,} | "
+                f"Avg Reward: {recent_avg:.1f}",
+                fontsize=12,
+            )
+
+        # Redraw
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+    @staticmethod
+    def _rolling_average(data: np.ndarray, window: int) -> np.ndarray:
+        """Compute rolling average with same output size as input."""
+        if len(data) < window:
+            window = len(data)
+
+        # Cumulative sum for efficient rolling average
+        cumsum = np.cumsum(np.insert(data, 0, 0))
+        rolling = (cumsum[window:] - cumsum[:-window]) / window
+
+        # Pad beginning to match size
+        pad = data[: len(data) - len(rolling)].cumsum() / np.arange(
+            1, len(data) - len(rolling) + 1
+        )
+        return np.concatenate([pad, rolling])
+
+    def save(self, filepath: str):
+        """Save the current figure to a file."""
+        self.fig.savefig(filepath, dpi=150, bbox_inches="tight")
+        print(f"Dashboard saved to {filepath}")
+
+    def close(self):
+        """Close the dashboard."""
+        plt.ioff()
+        plt.close(self.fig)
+
+
+class LiveGameViewer:
+    """
+    Simple live viewer for watching the agent play.
+
+    Displays game frames in a matplotlib window.
+    """
+
+    def __init__(self, figsize: tuple = (6, 6)):
+        """Initialize the viewer."""
+        plt.ion()
+        self.fig, self.ax = plt.subplots(figsize=figsize)
+        self.ax.axis("off")
+        self.ax.set_title("Agent Playing")
+        self.img = None
+        plt.show(block=False)
+
+    def show_frame(self, frame: np.ndarray):
+        """
+        Display a game frame.
+
+        Args:
+            frame: Game frame (H, W) or (H, W, C)
+        """
+        if self.img is None:
+            # First frame
+            if frame.ndim == 2:
+                self.img = self.ax.imshow(frame, cmap="gray")
+            else:
+                self.img = self.ax.imshow(frame)
+        else:
+            # Update existing
+            self.img.set_data(frame)
+
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+    def close(self):
+        """Close the viewer."""
+        plt.ioff()
+        plt.close(self.fig)
