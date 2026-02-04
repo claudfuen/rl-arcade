@@ -9,6 +9,7 @@ Provides live visualization of training progress including:
 """
 
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Button, Slider
 import numpy as np
 from collections import deque
 from typing import Optional, Deque
@@ -37,6 +38,7 @@ class TrainingDashboard:
         window_size: int = 100,
         update_interval: float = 0.5,
         figsize: tuple = (14, 10),
+        demo_every: int = 25,
     ):
         """
         Initialize the dashboard.
@@ -45,6 +47,7 @@ class TrainingDashboard:
             window_size: Rolling window for averaging
             update_interval: Minimum seconds between display updates
             figsize: Figure size (width, height) in inches
+            demo_every: Initial demo interval (0=disabled)
         """
         self.window_size = window_size
         self.update_interval = update_interval
@@ -60,6 +63,11 @@ class TrainingDashboard:
 
         self.current_timestep = 0
 
+        # Demo control
+        self._skip_demo_requested = False
+        self._demo_active = False
+        self._demo_every = demo_every
+
         # Setup matplotlib
         plt.ion()  # Interactive mode
         self.fig, self.axes = plt.subplots(2, 2, figsize=figsize)
@@ -68,7 +76,11 @@ class TrainingDashboard:
         # Initialize plots
         self._setup_plots()
 
+        # Add controls
+        self._setup_controls()
+
         plt.tight_layout()
+        plt.subplots_adjust(bottom=0.12)  # Make room for controls
         plt.show(block=False)
         plt.pause(0.1)
 
@@ -119,6 +131,83 @@ class TrainingDashboard:
         self.ax_entropy.set_ylabel("Entropy")
         self.ax_entropy.grid(True, alpha=0.3)
         (self.line_entropy,) = self.ax_entropy.plot([], [], "m-", linewidth=1.5)
+
+    def _setup_controls(self):
+        """Setup dashboard controls (demo slider and skip button)."""
+        # Demo interval slider (left side)
+        self.slider_ax = self.fig.add_axes([0.1, 0.02, 0.35, 0.03])
+        self.demo_slider = Slider(
+            self.slider_ax,
+            "Demo every",
+            valmin=0,
+            valmax=100,
+            valinit=self._demo_every,
+            valstep=5,
+            color="lightblue",
+        )
+        self.demo_slider.on_changed(self._on_slider_changed)
+        self._update_slider_label()
+
+        # Skip demo button (right side, initially hidden)
+        self.skip_button_ax = self.fig.add_axes([0.55, 0.02, 0.15, 0.03])
+        self.skip_button = Button(
+            self.skip_button_ax,
+            "Skip Demo",
+            color="lightsalmon",
+            hovercolor="salmon"
+        )
+        self.skip_button.on_clicked(self._on_skip_clicked)
+        self.skip_button_ax.set_visible(False)
+
+    def _on_slider_changed(self, val):
+        """Handle demo interval slider change."""
+        self._demo_every = int(val)
+        self._update_slider_label()
+
+    def _update_slider_label(self):
+        """Update slider label to show current value."""
+        if self._demo_every == 0:
+            self.slider_ax.set_title("Demo: OFF", fontsize=9, loc="left")
+        else:
+            self.slider_ax.set_title(f"Demo every {self._demo_every} updates", fontsize=9, loc="left")
+
+    def _on_skip_clicked(self, event):
+        """Handle skip button click."""
+        self._skip_demo_requested = True
+
+    @property
+    def demo_every(self) -> int:
+        """Get current demo interval setting."""
+        return self._demo_every
+
+    @demo_every.setter
+    def demo_every(self, value: int):
+        """Set demo interval and update slider."""
+        self._demo_every = max(0, min(100, value))
+        self.demo_slider.set_val(self._demo_every)
+
+    def demo_started(self):
+        """Call when a demo episode starts."""
+        self._demo_active = True
+        self._skip_demo_requested = False
+        self.skip_button_ax.set_visible(True)
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+    def demo_ended(self):
+        """Call when a demo episode ends."""
+        self._demo_active = False
+        self._skip_demo_requested = False
+        self.skip_button_ax.set_visible(False)
+        self.fig.canvas.draw_idle()
+        self.fig.canvas.flush_events()
+
+    def should_skip_demo(self) -> bool:
+        """Check if user requested to skip the current demo."""
+        # Process any pending events to catch button clicks
+        if self._demo_active:
+            self.fig.canvas.flush_events()
+        return self._skip_demo_requested
 
     def update(
         self,

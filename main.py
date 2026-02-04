@@ -204,6 +204,36 @@ def parse_args():
         default=None,
         help="Device to train on",
     )
+    # Settings overrides
+    resume_parser.add_argument(
+        "--demo-every",
+        type=int,
+        default=None,
+        help="Override: play demo game every N updates (0=disabled)",
+    )
+    resume_parser.add_argument(
+        "--render",
+        action="store_true",
+        help="Override: show game during training",
+    )
+    resume_parser.add_argument(
+        "--timesteps",
+        type=int,
+        default=None,
+        help="Override: new total timesteps target",
+    )
+    resume_parser.add_argument(
+        "--lr",
+        type=float,
+        default=None,
+        help="Override: learning rate",
+    )
+    resume_parser.add_argument(
+        "--entropy",
+        type=float,
+        default=None,
+        help="Override: entropy coefficient",
+    )
 
     # Sessions command
     sessions_parser = subparsers.add_parser(
@@ -499,9 +529,34 @@ def resume(args):
     # Get device
     device = get_device(args.device)
 
-    # Update training config device
+    # Get configs and apply overrides
     training_config = session.get_training_config()
     training_config.device = device
+
+    ppo_config = session.get_ppo_config()
+
+    # Apply setting overrides
+    if args.demo_every is not None:
+        training_config.demo_every = args.demo_every
+        print(f"Override: demo_every = {args.demo_every}")
+    if args.render:
+        training_config.render_training = True
+        print("Override: render = enabled")
+    if args.timesteps is not None:
+        training_config.total_timesteps = args.timesteps
+        print(f"Override: total_timesteps = {args.timesteps:,}")
+    if args.lr is not None:
+        ppo_config.learning_rate = args.lr
+        print(f"Override: learning_rate = {args.lr}")
+    if args.entropy is not None:
+        ppo_config.ent_coef = args.entropy
+        print(f"Override: entropy = {args.entropy}")
+
+    # Update session with new configs (so they're saved)
+    from config import config_to_dict
+    session.training_config = config_to_dict(training_config)
+    session.ppo_config = config_to_dict(ppo_config)
+    session.save()
 
     # Create trainer from session
     callbacks = [EpisodeLoggerCallback(log_interval=20)]

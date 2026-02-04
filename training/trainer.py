@@ -96,8 +96,10 @@ class Trainer:
         if self.training_config.render_training:
             print("Creating render environment...")
             self.render_env = self._create_render_env()
-        if self.training_config.demo_every > 0:
-            print(f"Demo mode: will play a game every {self.training_config.demo_every} updates")
+        # Create demo env if demos enabled OR if dashboard is shown (user can enable via slider)
+        if self.training_config.demo_every > 0 or show_dashboard:
+            if self.training_config.demo_every > 0:
+                print(f"Demo mode: will play a game every {self.training_config.demo_every} updates")
             self.demo_env = self._create_demo_env()
 
         # Create PPO agent
@@ -130,7 +132,9 @@ class Trainer:
         self.dashboard = None
         if show_dashboard:
             from visualization import TrainingDashboard
-            self.dashboard = TrainingDashboard()
+            self.dashboard = TrainingDashboard(
+                demo_every=self.training_config.demo_every
+            )
 
         # Timing
         self.start_time = None
@@ -239,17 +243,27 @@ class Trainer:
         """Play one episode to show current agent performance."""
         import torch
 
-        print(f"\n🎮 Demo episode (update {update_num})...")
+        print(f"\nDemo episode (update {update_num})...")
+
+        # Notify dashboard that demo started
+        if self.dashboard:
+            self.dashboard.demo_started()
 
         obs, _ = self.demo_env.reset()
         done = False
         total_reward = 0
         steps = 0
         max_steps = 2000  # Limit demo length
+        skipped = False
 
         self.agent.network.eval()
 
         while not done and steps < max_steps:
+            # Check if user wants to skip
+            if self.dashboard and self.dashboard.should_skip_demo():
+                skipped = True
+                break
+
             with torch.no_grad():
                 obs_tensor = torch.tensor(obs[None], dtype=torch.float32, device=self.agent.device)
                 action_logits, _ = self.agent.network(obs_tensor)
@@ -264,7 +278,14 @@ class Trainer:
             if self.env_config.env_name == "mario":
                 self.demo_env.render()
 
-        print(f"   Demo reward: {total_reward:.0f} | Steps: {steps}")
+        # Notify dashboard that demo ended
+        if self.dashboard:
+            self.dashboard.demo_ended()
+
+        if skipped:
+            print(f"   Demo skipped after {steps} steps (reward: {total_reward:.0f})")
+        else:
+            print(f"   Demo reward: {total_reward:.0f} | Steps: {steps}")
 
     def train(self, total_timesteps: Optional[int] = None) -> Dict:
         """
@@ -329,8 +350,9 @@ class Trainer:
             if num_updates % self.training_config.save_interval == 0:
                 self._save_checkpoint(num_updates)
 
-            # Play demo episode
-            if self.demo_env and num_updates % self.training_config.demo_every == 0:
+            # Play demo episode (use dashboard value if available, else config)
+            demo_every = self.dashboard.demo_every if self.dashboard else self.training_config.demo_every
+            if self.demo_env and demo_every > 0 and num_updates % demo_every == 0:
                 self._play_demo_episode(num_updates)
 
             # Run callbacks

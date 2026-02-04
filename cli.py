@@ -381,16 +381,46 @@ def resume_menu():
     # Ask about dashboard
     dashboard = confirm("Show live training graphs?", default=True)
 
+    # Ask about tweaking settings
+    if confirm("Tweak settings before resuming?", default=False):
+        print("\nCurrent settings (press Enter to keep):")
+
+        training_config = session.get_training_config()
+        ppo_config = session.get_ppo_config()
+
+        # Demo interval
+        current_demo = training_config.demo_every
+        new_demo = get_number(f"  Demo every N updates (0=off)", current_demo, min_val=0, max_val=200)
+        if new_demo != current_demo:
+            training_config.demo_every = new_demo
+            print(f"    -> Changed to {new_demo}")
+
+        # Timesteps
+        current_ts = training_config.total_timesteps
+        new_ts = get_number(f"  Total timesteps (thousands)", current_ts // 1000, min_val=10) * 1000
+        if new_ts != current_ts:
+            training_config.total_timesteps = new_ts
+            print(f"    -> Changed to {new_ts:,}")
+
+        # Update session with new configs
+        from config import config_to_dict
+        session.training_config = config_to_dict(training_config)
+        session.ppo_config = config_to_dict(ppo_config)
+        session.save()
+    else:
+        training_config = session.get_training_config()
+
     print(f"\nResuming: {session.session_id}")
     print(f"Game: {session.game}")
     print(f"Progress: {session.progress_percent():.1f}%")
+    if dashboard:
+        print("\nTip: Use the slider in the dashboard to adjust demo frequency in real-time!")
     print("\nPress Ctrl+C to stop at any time.\n")
 
     device = get_device()
     print(f"Using device: {device}\n")
 
     # Update training config device
-    training_config = session.get_training_config()
     training_config.device = device
 
     callbacks = [EpisodeLoggerCallback(log_interval=20)]
