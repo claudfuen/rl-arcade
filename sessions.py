@@ -258,6 +258,20 @@ class Session:
         current = self.progress.get("timesteps", 0)
         return min(100.0, (current / total) * 100)
 
+    def save_dashboard_state(self, state: dict) -> None:
+        """Save dashboard state to session directory."""
+        dashboard_file = os.path.join(self.session_dir, "dashboard_state.json")
+        with open(dashboard_file, "w") as f:
+            json.dump(state, f)
+
+    def load_dashboard_state(self) -> dict:
+        """Load dashboard state from session directory."""
+        dashboard_file = os.path.join(self.session_dir, "dashboard_state.json")
+        if os.path.exists(dashboard_file):
+            with open(dashboard_file, "r") as f:
+                return json.load(f)
+        return None
+
 
 class SessionManager:
     """

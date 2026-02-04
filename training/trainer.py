@@ -186,6 +186,21 @@ class Trainer:
             trainer.agent.load(latest_path, restore_rng=True)
             print(f"  Timesteps: {trainer.agent.num_timesteps:,}")
 
+        # Restore dashboard and trainer state if available
+        dashboard_state = session.load_dashboard_state()
+        if dashboard_state is not None:
+            # Restore dashboard graphs
+            if trainer.dashboard is not None:
+                trainer.dashboard.import_state(dashboard_state)
+                print(f"  Dashboard restored: {len(dashboard_state.get('rewards', []))} episodes")
+
+            # Restore trainer episode tracking
+            for r in dashboard_state.get("rewards", []):
+                trainer.episode_rewards.append(r)
+            for l in dashboard_state.get("lengths", []):
+                trainer.episode_lengths.append(l)
+            trainer.total_episodes = len(dashboard_state.get("rewards", []))
+
         return trainer
 
     def _create_render_env(self):
@@ -604,6 +619,10 @@ class Trainer:
                 updates=num_updates,
                 best_reward=mean_reward,
             )
+
+            # Save dashboard state for resume
+            if self.dashboard is not None:
+                self.session.save_dashboard_state(self.dashboard.export_state())
 
             # Mark completed if final
             if final:

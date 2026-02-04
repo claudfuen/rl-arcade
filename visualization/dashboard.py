@@ -376,6 +376,43 @@ class TrainingDashboard:
         self.fig.savefig(filepath, dpi=150, bbox_inches="tight")
         print(f"Dashboard saved to {filepath}")
 
+    def export_state(self) -> dict:
+        """Export dashboard data for persistence (e.g., when saving session)."""
+        return {
+            "rewards": list(self.rewards),
+            "lengths": list(self.lengths),
+            "policy_losses": list(self.policy_losses),
+            "value_losses": list(self.value_losses),
+            "entropies": list(self.entropies),
+            "timesteps": list(self.timesteps),
+            "current_timestep": self.current_timestep,
+            "demo_every": self._demo_every,
+            "total_timesteps": self._total_timesteps,
+        }
+
+    def import_state(self, state: dict):
+        """Restore dashboard data from saved state."""
+        if state is None:
+            return
+
+        # Restore data
+        self.rewards.extend(state.get("rewards", []))
+        self.lengths.extend(state.get("lengths", []))
+        self.policy_losses.extend(state.get("policy_losses", []))
+        self.value_losses.extend(state.get("value_losses", []))
+        self.entropies.extend(state.get("entropies", []))
+        self.timesteps.extend(state.get("timesteps", []))
+        self.current_timestep = state.get("current_timestep", 0)
+
+        # Restore settings
+        if "demo_every" in state:
+            self.demo_every = state["demo_every"]
+        if "total_timesteps" in state:
+            self.total_timesteps = state["total_timesteps"]
+
+        # Refresh display to show restored data
+        self._refresh_display()
+
     def close(self):
         """Close the dashboard."""
         plt.ioff()
